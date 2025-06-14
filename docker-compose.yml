@@ -40,17 +40,7 @@ services:
     command: >
       sh -c "
         python manage.py migrate &&
-        scripts/create_superuser.sh &&
         python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
 
-  # frontend
-  frontend:
-    container_name: frontend
-    build:
-      context: ./frontend/app
-      dockerfile: ../Dockerfile
-    restart: always
-    ports:
-      - "3000:3000"

@@ -16,7 +16,7 @@
           "${workspaceFolder}/docker-compose.dev.yml"
         ],
         "envFiles": ["backend/.env"],
-        "projectName": "healthcare-app"
+        "projectName": "backend_server"
       }
     },
     {
@@ -32,7 +32,7 @@
           "${workspaceFolder}/docker-compose.dev.yml"
         ],
         "envFiles": ["backend/.env"],
-        "projectName": "healthcare-app"
+        "projectName": "backend_server"
       }
     },
     {
