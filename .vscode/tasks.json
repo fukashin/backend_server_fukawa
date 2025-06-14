@@ -1,0 +1,68 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Healthcare App: docker-compose up",
+      "type": "docker-compose",
+      "dockerCompose": {
+        "up": {
+          "detached": true,
+          "build": true
+        },
+        "files": [
+          "${workspaceFolder}/docker-compose.yml",
+          "${workspaceFolder}/docker-compose.dev.yml"
+        ],
+        "envFiles": ["backend/.env"],
+        "projectName": "healthcare-app"
+      }
+    },
+    {
+      "label": "Healthcare App: docker-compose down",
+      "type": "docker-compose",
+      "dockerCompose": {
+        "down": {
+          "removeImages": "all",
+          "removeVolumes": true
+        },
+        "files": [
+          "${workspaceFolder}/docker-compose.yml",
+          "${workspaceFolder}/docker-compose.dev.yml"
+        ],
+        "envFiles": ["backend/.env"],
+        "projectName": "healthcare-app"
+      }
+    },
+    {
+      "label": "Azure Bicep Deployment",
+      "type": "shell",
+      "command": "docker compose -f ${workspaceFolder}/infra/docker-compose.yml run --rm deploy_resource sh ./scripts/azure-bicep-deployments.sh"
+    },
+    {
+      "label": "Django: Make Migrations",
+      "type": "shell",
+      "command": "python",
+      "args": ["backend/manage.py", "makemigrations"],
+      "group": {
+          "kind": "build",
+          "isDefault": true
+      },
+      "problemMatcher": [],
+      "detail": "Djangoのmakemigrationsコマンドを実行します。"
+  },
+  {
+      "label": "Django: Migrate",
+      "type": "shell",
+      "command": "python",
+      "args": ["backend/manage.py", "migrate"],
+      "group": {
+          "kind": "build",
+          "isDefault": false
+      },
+      "problemMatcher": [],
+      "detail": "Djangoのmigrateコマンドを実行します。"
+  }
+  ]
+}

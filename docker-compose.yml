@@ -1,0 +1,56 @@
+services:
+  # database
+  database:
+    env_file:
+    - ./backend/.env
+    image: postgres
+    container_name: database
+    ports:
+      - "5432:5432"
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+      args:
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # backend
+  backend:
+    container_name: backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+        DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+        DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
+        DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
+        DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
+        DJANGO_SUPERUSER_EMAIL: ${DJANGO_SUPERUSER_EMAIL}
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        POSTGRES_HOST: ${POSTGRES_HOST}
+    env_file:
+    - ./backend/.env
+    command: >
+      sh -c "
+        python manage.py migrate &&
+        scripts/create_superuser.sh &&
+        python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+
+  # frontend
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend/app
+      dockerfile: ../Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
