@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -105,6 +106,9 @@ DATABASES = {
         'PORT': 5432,
     }
 } 
+# Render用 DATABASE_URL が存在する場合はそれで上書き
+if os.getenv('DATABASE_URL'):
+    DATABASES['default'] = dj_database_url.config(conn_max_age=600, ssl_require=True)
 
 
 # Password validation
@@ -151,7 +155,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # 自身以外のオリジンのHTTPリクエスト内にクッキーを含めることを許可する
 CORS_ALLOW_CREDENTIALS = True
 # アクセスを許可したいURL（アクセス元）を追加
-CORS_ALLOWED_ORIGINS = os.environ.get("TRUSTED_ORIGINS").split(" ")
+CORS_ALLOWED_ORIGINS = os.environ.get("TRUSTED_ORIGINS", "").split()
 print(os.environ.get("TRUSTED_ORIGINS"))
 # プリフライト(事前リクエスト)の設定
 # 30分だけ許可
