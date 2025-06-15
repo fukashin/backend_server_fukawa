@@ -18,6 +18,9 @@ services:
       - key: POSTGRES_HOST
       - key: POSTGRES_DB
       - key: DATABASE_URL
+        fromDatabase:
+          name: backend_server_db  # ← Renderで作ったDBの名前と一致させる
+          property: connectionString
       - key: DJANGO_SETTINGS_MODULE
         value: app.settings  # settings.py の位置は決まっているためここだけ固定
 
