@@ -136,5 +136,4 @@ infra/*local*
 .venv
 
 # 動かん過ぎて修正した修正が反映されないように排除　府川
-backend/scripts/
 backend/.idea

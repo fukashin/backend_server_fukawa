@@ -1,0 +1,46 @@
+# docker-compose.yml をベースに開発用に設定を追加、上書き
+
+services:
+  # database
+  database:
+    env_file:
+      - ./backend/.env
+    image: postgres
+    container_name: database
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+      args:
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # backend
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/app:/code/app
+      - ./backend/basicapi:/code/basicapi
+      - ./backend/.env:/code/.env
+      - ./backend/manage.py:/code/manage.py
+      - ./backend/requirements.txt:/code/requirements.txt
+    depends_on:
+      - database
+    # tty: true           # コンテナが終了せずに標準出力を保持する
+    # stdin_open: true    # コンテナの標準入力を保持する
+    # command: tail -f /dev/null  # Django サーバー起動を停止してコンテナを待機状態にする
+
+  # frontend
+  frontend:
+    volumes:
+      - ./frontend/app:/app
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # ファイル変更検知を有効化
+      - WATCHPACK_POLLING=true  # Webpack の監視を強制
