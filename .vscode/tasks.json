@@ -36,6 +36,22 @@
       }
     },
     {
+      "label": "Healthcare App: docker-compose up_MAC",
+      "type": "docker-compose",
+      "dockerCompose": {
+        "up": {
+          "detached": true,
+          "build": true
+        },
+        "files": [
+          "${workspaceFolder}/docker-compose.override.yml",
+          "${workspaceFolder}/docker-compose.dev.yml"
+        ],
+        "envFiles": ["backend/.env"],
+        "projectName": "backend_server"
+      }
+    },
+    {
       "label": "Azure Bicep Deployment",
       "type": "shell",
       "command": "docker compose -f ${workspaceFolder}/infra/docker-compose.yml run --rm deploy_resource sh ./scripts/azure-bicep-deployments.sh"

@@ -6,7 +6,7 @@ services:
     image: postgres
     container_name: database
     ports:
-      - "5432:5432"
+      - "5433:5432"
     build:
       context: ./database
       dockerfile: Dockerfile
