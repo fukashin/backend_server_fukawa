@@ -52,6 +52,47 @@
       }
     },
     {
+      "label": "Healthcare App: flutter run (web)",
+      "type": "shell",
+      "command": "flutter",
+      "args": [
+        "run",
+        "-d",
+        "chrome",
+        "--web-port=8080"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/helth_mobile"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Healthcare App: Start All_windes_mobile",
+      "dependsOn": [
+        "Healthcare App: docker-compose up",
+        "Healthcare App: flutter run (web)"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Healthcare App: Start All_Mac_mobile",
+      "dependsOn": [
+        "Healthcare App: docker-compose up_MAC",
+        "Healthcare App: flutter run (web)"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
       "label": "Azure Bicep Deployment",
       "type": "shell",
       "command": "docker compose -f ${workspaceFolder}/infra/docker-compose.yml run --rm deploy_resource sh ./scripts/azure-bicep-deployments.sh"
