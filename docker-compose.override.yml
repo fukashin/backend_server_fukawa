@@ -46,3 +46,18 @@ services:
     ports:
       - "8000:8000"
 
+  flutter_web:
+    container_name: flutter_web
+    build:
+      context: ./helth_mobile
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080" # Flutter Web デフォルトポート
+    volumes:
+      - ./helth_mobile:/app
+    working_dir: /app
+    command: >
+      bash -c "
+        flutter pub get &&
+        flutter run -d web-server --web-hostname=0.0.0.0 --web-port=8080"
+
