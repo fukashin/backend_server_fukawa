@@ -22,11 +22,45 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             try:
-                serializer.save()
-                return Response(
-                    {"message": "User registered successfully!"},
+                user = serializer.save()
+                # ユーザー登録後、トークンを生成
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+                
+                # レスポンスにトークンを含める
+                response = Response(
+                    {
+                        "message": "User registered successfully!",
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "user": {
+                            "email": user.email,
+                            "id": user.id
+                        }
+                    },
                     status=status.HTTP_201_CREATED
                 )
+                
+                # HttpOnlyなCookieにトークンを設定
+                response.set_cookie(
+                    key='access_token',
+                    value=access_token,
+                    httponly=True,
+                    secure=False,
+                    max_age=3600,
+                    path='/',
+                )
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=False,
+                    max_age=86400,
+                    path='/',
+                )
+                
+                return response
             except Exception as e:
                 logger.error(f"Error during user registration: {e}", exc_info=True)
                 return Response(
@@ -47,9 +81,17 @@ class CustomTokenObtainPairView(BaseTokenObtainPairView):
         serializer.is_valid(raise_exception=True)
         tokens = serializer.validated_data  # tokensは {'access': <token>, 'refresh': <token>} の形式
 
-        # 成功レスポンスを作成
+        # 成功レスポンスを作成（トークンをレスポンスボディに含める）
         response = Response(
-            {"message": "Logged in successfully."},
+            {
+                "message": "Logged in successfully.",
+                "access_token": tokens['access'],
+                "refresh_token": tokens['refresh'],
+                "user": {
+                    "email": request.user.email,
+                    "id": request.user.id
+                }
+            },
             status=status.HTTP_200_OK
         )
 
