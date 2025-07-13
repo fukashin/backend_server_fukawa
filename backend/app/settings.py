@@ -192,7 +192,7 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',), 
     'USER_ID_FIELD': 'email',
     # 'USER_ID_FIELD': 'username', 
-    'USER_ID_CLAIM': 'username', 
+    'USER_ID_CLAIM': 'email', 
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',), 
     'TOKEN_TYPE_CLAIM': 'token_type', 
 }
