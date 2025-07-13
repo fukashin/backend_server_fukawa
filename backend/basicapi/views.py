@@ -23,6 +23,17 @@ class RegisterView(APIView):
         if serializer.is_valid():
             try:
                 user = serializer.save()
+                
+                # ユーザープロフィールを作成
+                # デフォルト値を設定
+                UserProfile.objects.create(
+                    user=user,
+                    height=170.0,  # デフォルト身長
+                    weight=60.0,   # デフォルト体重
+                    nickname=user.email.split('@')[0],  # メールアドレスの@前をニックネームに
+                    name=request.data.get('name', user.email.split('@')[0])  # nameパラメータがあれば使用、なければニックネームと同じ
+                )
+                
                 # ユーザー登録後、トークンを生成
                 refresh = RefreshToken.for_user(user)
                 access_token = str(refresh.access_token)
@@ -131,23 +142,63 @@ class LogoutView(APIView):
 
 # プロフィールビューセット
 class UserProfileViewSet(viewsets.ModelViewSet):
-    queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # 認証されたユーザーのプロフィールのみを返す
+        user = self.request.user
+        return UserProfile.objects.filter(user=user)
+    
+    def retrieve(self, request, *args, **kwargs):
+        # PKではなくユーザーIDでプロフィールを取得できるようにする
+        try:
+            # URLのpkパラメータがユーザーIDの場合
+            user_id = kwargs.get('pk')
+            if user_id and user_id.isdigit():
+                user_id = int(user_id)
+                # 自分のプロフィールのみアクセス可能
+                if user_id == request.user.id:
+                    profile = UserProfile.objects.get(user_id=user_id)
+                    serializer = self.get_serializer(profile)
+                    return Response(serializer.data)
+                else:
+                    return Response({"detail": "他のユーザーのプロフィールにはアクセスできません。"}, 
+                                    status=status.HTTP_403_FORBIDDEN)
+            return super().retrieve(request, *args, **kwargs)
+        except UserProfile.DoesNotExist:
+            return Response({"detail": "プロフィールが見つかりません。"}, 
+                            status=status.HTTP_404_NOT_FOUND)
 
 # 体重履歴ビューセット
 class WeightRecordViewSet(viewsets.ModelViewSet):
-    queryset = WeightRecord.objects.all()
     serializer_class = WeightRecordSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # 認証されたユーザーの体重記録のみを返す
+        user = self.request.user
+        return WeightRecord.objects.filter(user=user)
 
 # カロリー記録ビューセット
 class CalorieRecordViewSet(viewsets.ModelViewSet):
-    queryset = CalorieRecord.objects.all()
     serializer_class = CalorieRecordSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # 認証されたユーザーのカロリー記録のみを返す
+        user = self.request.user
+        return CalorieRecord.objects.filter(user=user)
 
 # 睡眠記録ビューセット
 class SleepRecordViewSet(viewsets.ModelViewSet):
-    queryset = SleepRecord.objects.all()
     serializer_class = SleepRecordSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # 認証されたユーザーの睡眠記録のみを返す
+        user = self.request.user
+        return SleepRecord.objects.filter(user=user)
 
 
 class AuthStatusView(APIView):
