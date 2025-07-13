@@ -81,6 +81,9 @@ class CustomTokenObtainPairView(BaseTokenObtainPairView):
         serializer.is_valid(raise_exception=True)
         tokens = serializer.validated_data  # tokensは {'access': <token>, 'refresh': <token>} の形式
 
+        # ユーザー情報を取得
+        user = serializer.user
+
         # 成功レスポンスを作成（トークンをレスポンスボディに含める）
         response = Response(
             {
@@ -88,8 +91,8 @@ class CustomTokenObtainPairView(BaseTokenObtainPairView):
                 "access_token": tokens['access'],
                 "refresh_token": tokens['refresh'],
                 "user": {
-                    "email": request.user.email,
-                    "id": request.user.id
+                    "email": user.email,
+                    "id": user.id
                 }
             },
             status=status.HTTP_200_OK
