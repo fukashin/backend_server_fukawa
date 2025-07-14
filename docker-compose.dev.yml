@@ -26,11 +26,7 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - ./backend/app:/code/app
-      - ./backend/basicapi:/code/basicapi
-      - ./backend/.env:/code/.env
-      - ./backend/manage.py:/code/manage.py
-      - ./backend/requirements.txt:/code/requirements.txt
+      - ./backend:/code  # ← ディレクトリ全体をマウント（個別ではなく）
     depends_on:
       - database
     # tty: true           # コンテナが終了せずに標準出力を保持する
