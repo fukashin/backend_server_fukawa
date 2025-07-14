@@ -266,6 +266,21 @@ class CookieUserInfoView(APIView):
         return Response({"user_id": user_id, "message": "Token is valid. User authenticated."},
                         status=status.HTTP_200_OK)
 
+class StandardUserInfoView(APIView):
+    """
+    標準的なJWT認証（Authorizationヘッダー）を使用してユーザー情報を取得するビュー
+    フロントエンドとの互換性のために追加
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        return Response({
+            "user_id": user.id,
+            "email": user.email,
+            "message": "Token is valid. User authenticated."
+        }, status=status.HTTP_200_OK)
+
 class DailyRecordUpsertAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
