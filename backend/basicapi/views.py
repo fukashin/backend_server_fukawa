@@ -169,6 +169,33 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         except UserProfile.DoesNotExist:
             return Response({"detail": "プロフィールが見つかりません。"}, 
                             status=status.HTTP_404_NOT_FOUND)
+    
+    def update(self, request, *args, **kwargs):
+        # PKではなくユーザーIDでプロフィールを更新できるようにする
+        try:
+            # URLのpkパラメータがユーザーIDの場合
+            user_id = kwargs.get('pk')
+            if user_id and user_id.isdigit():
+                user_id = int(user_id)
+                # 自分のプロフィールのみアクセス可能
+                if user_id == request.user.id:
+                    profile = UserProfile.objects.get(user_id=user_id)
+                    serializer = self.get_serializer(profile, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        serializer.save()
+                        return Response(serializer.data)
+                    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    return Response({"detail": "他のユーザーのプロフィールは更新できません。"}, 
+                                    status=status.HTTP_403_FORBIDDEN)
+            return super().update(request, *args, **kwargs)
+        except UserProfile.DoesNotExist:
+            return Response({"detail": "プロフィールが見つかりません。"}, 
+                            status=status.HTTP_404_NOT_FOUND)
+    
+    def partial_update(self, request, *args, **kwargs):
+        # PATCHメソッド用
+        return self.update(request, *args, **kwargs)
 
 # 体重履歴ビューセット
 class WeightRecordViewSet(viewsets.ModelViewSet):
