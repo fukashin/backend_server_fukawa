@@ -69,9 +69,9 @@ class WeightRecord(models.Model):
     weight = models.FloatField()  # 体重（kg）
     created_at = models.DateTimeField(auto_now_add=True)  # レコード作成日時
     updated_at = models.DateTimeField(auto_now=True)  # レコード更新日時
-    month = models.IntegerField()  # 月番号（例: 1〜12）
-    week = models.IntegerField()  # 週番号（例: 1〜53）
-    year = models.IntegerField()  # 年
+    month = models.IntegerField(null=True, blank=True)  # 月番号（例: 1〜12）
+    week = models.IntegerField(null=True, blank=True)  # 週番号（例: 1〜53）
+    year = models.IntegerField(null=True, blank=True)  # 年
 
     def __str__(self):
         return f"{self.user.email} - {self.weight}kg on {self.recorded_at}"
