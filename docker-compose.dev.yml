@@ -14,7 +14,7 @@ services:
         POSTGRES_USER: ${POSTGRES_USER}
         POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,9 +26,9 @@ services:
     env_file:
       - ./backend/.env
     volumes:
-      - ./backend:/code  # ← ディレクトリ全体をマウント（個別ではなく）
+      - ./backend:/code # ← ディレクトリ全体をマウント（個別ではなく）
     depends_on:
       - database
-    # tty: true           # コンテナが終了せずに標準出力を保持する
-    # stdin_open: true    # コンテナの標準入力を保持する
-    # command: tail -f /dev/null  # Django サーバー起動を停止してコンテナを待機状態にする
+    # tty: true # コンテナが終了せずに標準出力を保持する
+    # stdin_open: true # コンテナの標準入力を保持する
+    # command: tail -f /dev/null # Django サーバー起動を停止してコンテナを待機状態にする

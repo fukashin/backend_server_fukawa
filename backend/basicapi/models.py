@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 from django.utils.timezone import now  # 現在の日時を取得するためのヘルパー関数
 import uuid
+from django.utils import timezone
 
 # カスタムマネージャー
 class CustomUserManager(BaseUserManager):
@@ -109,3 +110,26 @@ class SleepRecord(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.sleep_time}min on {self.recorded_at}"
+
+# Google認証情報テーブル
+class GoogleAuthInfo(models.Model):
+    id = models.AutoField(primary_key=True)  # 主キー
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='google_auth')  # ユーザーID
+    google_id = models.CharField(max_length=255, unique=True)  # GoogleのユーザーID
+    google_email = models.EmailField()  # Googleアカウントのメールアドレス
+    google_name = models.CharField(max_length=255, null=True, blank=True)  # Googleアカウントの名前
+    google_picture = models.URLField(null=True, blank=True)  # Googleアカウントのプロフィール画像URL
+    access_token = models.TextField(null=True, blank=True)  # アクセストークン（暗号化推奨）
+    refresh_token = models.TextField(null=True, blank=True)  # リフレッシュトークン（暗号化推奨）
+    token_expires_at = models.DateTimeField(null=True, blank=True)  # トークンの有効期限
+    created_at = models.DateTimeField(auto_now_add=True)  # 作成日時
+    updated_at = models.DateTimeField(auto_now=True)  # 更新日時
+
+    def __str__(self):
+        return f"{self.user.email} - Google: {self.google_email}"
+
+    def is_token_valid(self):
+        """トークンが有効かどうかを確認"""
+        if not self.token_expires_at:
+            return False
+        return timezone.now() < self.token_expires_at
