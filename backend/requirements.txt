@@ -6,3 +6,4 @@ djangorestframework_simplejwt #追加
 dj-database-url
 dotenv
 requests
+firebase-admin #追加

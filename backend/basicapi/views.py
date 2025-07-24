@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status,viewsets
 from rest_framework_simplejwt.views import TokenRefreshView as BaseTokenRefreshView
 from rest_framework_simplejwt.views import TokenObtainPairView as BaseTokenObtainPairView
-from .models import UserProfile, WeightRecord, CalorieRecord, SleepRecord, GoogleAuthInfo, CustomUser
+from .models import UserProfile, WeightRecord, CalorieRecord, SleepRecord, GoogleAuthInfo, CustomUser, FirebaseAuthInfo
 from .serializers import RegisterSerializer, CustomTokenObtainPairSerializer, UserProfileSerializer, WeightRecordSerializer, CalorieRecordSerializer, SleepRecordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -15,6 +15,8 @@ import datetime as _dt     # ★ これを追加
 import requests
 from django.utils import timezone
 from django.db import transaction
+import firebase_admin
+from firebase_admin import credentials, auth
 
 # ログ設定
 logger = logging.getLogger(__name__)
@@ -393,9 +395,12 @@ class GoogleAuthView(APIView):
     
     def post(self, request, *args, **kwargs):
         try:
+            logger.info("Google認証リクエストを受信しました")
+            
             # リクエストからGoogleトークンを取得
             google_token = request.data.get('access_token')
             if not google_token:
+                logger.warning("Google access tokenが提供されていません")
                 return Response(
                     {"error": "Google access token is required"},
                     status=status.HTTP_400_BAD_REQUEST
@@ -404,12 +409,14 @@ class GoogleAuthView(APIView):
             # GoogleのAPIを使ってトークンを検証し、ユーザー情報を取得
             google_user_info = self._verify_google_token(google_token)
             if not google_user_info:
+                logger.warning("無効なGoogleトークンです")
                 return Response(
                     {"error": "Invalid Google token"},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
             
             # トランザクション内でユーザー処理を実行
+            logger.info(f"Google認証成功: {google_user_info.get('email')}、ユーザー処理を開始します")
             with transaction.atomic():
                 user, is_new_user = self._get_or_create_user(google_user_info, google_token)
                 
@@ -417,6 +424,8 @@ class GoogleAuthView(APIView):
                 refresh = RefreshToken.for_user(user)
                 access_token = str(refresh.access_token)
                 refresh_token = str(refresh)
+                
+                logger.info(f"ユーザー {user.email} のJWTトークンを生成しました")
                 
                 # レスポンスを作成
                 response_data = {
@@ -452,10 +461,17 @@ class GoogleAuthView(APIView):
                     path='/',
                 )
                 
+                logger.info(f"ユーザー {user.email} の認証が完了しました。新規ユーザー: {is_new_user}")
                 return response
                 
+        except transaction.TransactionManagementError as e:
+            logger.error(f"トランザクションエラー: {e}", exc_info=True)
+            return Response(
+                {"error": "Database transaction error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         except Exception as e:
-            logger.error(f"Google authentication error: {e}", exc_info=True)
+            logger.error(f"Google認証エラー: {e}", exc_info=True)
             return Response(
                 {"error": "Authentication failed"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -466,6 +482,7 @@ class GoogleAuthView(APIView):
         GoogleのAPIを使ってトークンを検証し、ユーザー情報を取得
         """
         try:
+            logger.info("Googleトークンの検証を開始します")
             # Google OAuth2 APIを使ってトークンを検証
             response = requests.get(
                 f'https://www.googleapis.com/oauth2/v1/userinfo?access_token={token}',
@@ -473,13 +490,23 @@ class GoogleAuthView(APIView):
             )
             
             if response.status_code == 200:
-                return response.json()
+                user_info = response.json()
+                logger.info(f"Googleトークンの検証に成功しました: {user_info.get('email')}")
+                return user_info
             else:
-                logger.warning(f"Google token verification failed: {response.status_code}")
+                try:
+                    error_data = response.json()
+                    error_message = error_data.get('error', {}).get('message', 'Unknown error')
+                    logger.warning(f"Googleトークン検証失敗: ステータスコード={response.status_code}, エラー={error_message}")
+                except ValueError:
+                    logger.warning(f"Googleトークン検証失敗: ステータスコード={response.status_code}, レスポンス={response.text}")
                 return None
                 
         except requests.RequestException as e:
-            logger.error(f"Google API request failed: {e}")
+            logger.error(f"Google API リクエスト失敗: {e}", exc_info=True)
+            return None
+        except Exception as e:
+            logger.error(f"Googleトークン検証中に予期しないエラーが発生しました: {e}", exc_info=True)
             return None
     
     def _get_or_create_user(self, google_user_info, google_token):
@@ -504,16 +531,47 @@ class GoogleAuthView(APIView):
             google_auth.token_expires_at = timezone.now() + timezone.timedelta(hours=1)
             google_auth.save()
             
+            logger.info(f"既存のGoogle認証ユーザーでログインしました: {user.email}")
+            
         except GoogleAuthInfo.DoesNotExist:
-            # 新規ユーザーの場合
-            is_new_user = True
+            # 新規Google認証の場合
             
             # メールアドレスで既存ユーザーを検索
             try:
                 user = CustomUser.objects.get(email=google_email)
-                # 既存ユーザーにGoogle認証情報を追加
+                is_new_user = False
+                logger.info(f"既存ユーザー({user.email})にGoogle認証情報を追加します")
+                
+                # 既存のユーザーにGoogle認証情報が既に関連付けられているか確認
+                try:
+                    existing_google_auth = GoogleAuthInfo.objects.get(user=user)
+                    # 既存のGoogle認証情報を更新
+                    existing_google_auth.google_id = google_id
+                    existing_google_auth.google_email = google_email
+                    existing_google_auth.google_name = google_name
+                    existing_google_auth.google_picture = google_picture
+                    existing_google_auth.access_token = google_token
+                    existing_google_auth.token_expires_at = timezone.now() + timezone.timedelta(hours=1)
+                    existing_google_auth.save()
+                    logger.info(f"既存のGoogle認証情報を更新しました: {user.email}")
+                except GoogleAuthInfo.DoesNotExist:
+                    # 新しいGoogle認証情報を作成
+                    GoogleAuthInfo.objects.create(
+                        user=user,
+                        google_id=google_id,
+                        google_email=google_email,
+                        google_name=google_name,
+                        google_picture=google_picture,
+                        access_token=google_token,
+                        token_expires_at=timezone.now() + timezone.timedelta(hours=1)
+                    )
+                    logger.info(f"新しいGoogle認証情報を作成しました: {user.email}")
+                
             except CustomUser.DoesNotExist:
                 # 完全に新規のユーザーを作成
+                is_new_user = True
+                logger.info(f"新規ユーザーを作成します: {google_email}")
+                
                 user = CustomUser.objects.create_user(
                     email=google_email,
                     password=None  # Googleログインなのでパスワードは不要
@@ -527,17 +585,18 @@ class GoogleAuthView(APIView):
                     nickname=google_name or google_email.split('@')[0],
                     name=google_name or google_email.split('@')[0]
                 )
-            
-            # Google認証情報を作成
-            GoogleAuthInfo.objects.create(
-                user=user,
-                google_id=google_id,
-                google_email=google_email,
-                google_name=google_name,
-                google_picture=google_picture,
-                access_token=google_token,
-                token_expires_at=timezone.now() + timezone.timedelta(hours=1)
-            )
+                
+                # 新規ユーザー用のGoogle認証情報を作成
+                GoogleAuthInfo.objects.create(
+                    user=user,
+                    google_id=google_id,
+                    google_email=google_email,
+                    google_name=google_name,
+                    google_picture=google_picture,
+                    access_token=google_token,
+                    token_expires_at=timezone.now() + timezone.timedelta(hours=1)
+                )
+                logger.info(f"新規ユーザーとGoogle認証情報を作成しました: {user.email}")
         
         # 最終ログイン時刻を更新
         user.last_login = timezone.now()
@@ -568,4 +627,271 @@ class GoogleAuthStatusView(APIView):
         except GoogleAuthInfo.DoesNotExist:
             return Response({
                 "is_google_authenticated": False
+            }, status=status.HTTP_200_OK)
+
+# Firebase Admin SDKの初期化
+try:
+    # Firebase Admin SDKが既に初期化されているかチェック
+    firebase_admin.get_app()
+except ValueError:
+    # 初期化されていない場合は初期化
+    # 本番環境では、サービスアカウントのキーファイルを使用することを推奨
+    # ここではアプリケーションのデフォルト認証情報を使用
+    cred = credentials.ApplicationDefault()
+    firebase_admin.initialize_app(cred)
+    logger.info("Firebase Admin SDKが初期化されました")
+
+# Firebase認証ビュー
+class FirebaseAuthView(APIView):
+    """
+    Firebase IDトークンを受け取り、ユーザーの登録/ログインを処理するビュー
+    """
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            logger.info("Firebase認証リクエストを受信しました")
+            
+            # リクエストからFirebase IDトークンを取得
+            id_token = request.data.get('id_token')
+            if not id_token:
+                logger.warning("Firebase IDトークンが提供されていません")
+                return Response(
+                    {"error": "Firebase ID token is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Firebase Admin SDKを使ってトークンを検証し、ユーザー情報を取得
+            firebase_user = self._verify_firebase_token(id_token)
+            if not firebase_user:
+                logger.warning("無効なFirebase IDトークンです")
+                return Response(
+                    {"error": "Invalid Firebase ID token"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # トランザクション内でユーザー処理を実行
+            logger.info(f"Firebase認証成功: {firebase_user.get('email')}、ユーザー処理を開始します")
+            with transaction.atomic():
+                user, is_new_user = self._get_or_create_user(firebase_user)
+                
+                # JWTトークンを生成
+                refresh = RefreshToken.for_user(user)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+                
+                logger.info(f"ユーザー {user.email} のJWTトークンを生成しました")
+                
+                # レスポンスを作成
+                response_data = {
+                    "message": "Firebase authentication successful",
+                    "is_new_user": is_new_user,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "firebase_uid": firebase_user.get('uid'),
+                        "firebase_name": firebase_user.get('name'),
+                        "firebase_picture": firebase_user.get('picture')
+                    }
+                }
+                
+                response = Response(response_data, status=status.HTTP_200_OK)
+                
+                # HttpOnlyなCookieにトークンを設定
+                response.set_cookie(
+                    key='access_token',
+                    value=access_token,
+                    httponly=True,
+                    secure=False,  # 開発環境では False
+                    max_age=3600,
+                    path='/',
+                )
+                response.set_cookie(
+                    key='refresh_token',
+                    value=refresh_token,
+                    httponly=True,
+                    secure=False,
+                    max_age=86400,
+                    path='/',
+                )
+                
+                logger.info(f"ユーザー {user.email} の認証が完了しました。新規ユーザー: {is_new_user}")
+                return response
+                
+        except transaction.TransactionManagementError as e:
+            logger.error(f"トランザクションエラー: {e}", exc_info=True)
+            return Response(
+                {"error": "Database transaction error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            logger.error(f"Firebase認証エラー: {e}", exc_info=True)
+            return Response(
+                {"error": "Authentication failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _verify_firebase_token(self, id_token):
+        """
+        Firebase Admin SDKを使ってIDトークンを検証し、ユーザー情報を取得
+        """
+        try:
+            logger.info("Firebase IDトークンの検証を開始します")
+            # Firebase Admin SDKを使ってトークンを検証
+            decoded_token = auth.verify_id_token(id_token)
+            
+            # ユーザー情報を取得
+            uid = decoded_token.get('uid')
+            if not uid:
+                logger.warning("トークンにUIDが含まれていません")
+                return None
+            
+            # Firebase Authからユーザー情報を取得
+            firebase_user = auth.get_user(uid)
+            
+            # 必要な情報を辞書に格納
+            user_info = {
+                'uid': firebase_user.uid,
+                'email': firebase_user.email,
+                'name': firebase_user.display_name,
+                'picture': firebase_user.photo_url,
+                'provider_id': decoded_token.get('firebase', {}).get('sign_in_provider')
+            }
+            
+            logger.info(f"Firebase IDトークンの検証に成功しました: {user_info.get('email')}")
+            return user_info
+            
+        except auth.InvalidIdTokenError:
+            logger.warning("無効なFirebase IDトークンです")
+            return None
+        except auth.ExpiredIdTokenError:
+            logger.warning("期限切れのFirebase IDトークンです")
+            return None
+        except auth.RevokedIdTokenError:
+            logger.warning("取り消されたFirebase IDトークンです")
+            return None
+        except auth.UserNotFoundError:
+            logger.warning("ユーザーが見つかりません")
+            return None
+        except Exception as e:
+            logger.error(f"Firebase IDトークン検証中に予期しないエラーが発生しました: {e}", exc_info=True)
+            return None
+    
+    def _get_or_create_user(self, firebase_user):
+        """
+        Firebaseユーザー情報を基にユーザーを取得または作成
+        """
+        firebase_uid = firebase_user.get('uid')
+        firebase_email = firebase_user.get('email')
+        firebase_name = firebase_user.get('name', '')
+        firebase_picture = firebase_user.get('picture', '')
+        provider_id = firebase_user.get('provider_id', '')
+        
+        # Firebase認証情報でユーザーを検索
+        try:
+            firebase_auth = FirebaseAuthInfo.objects.get(firebase_uid=firebase_uid)
+            user = firebase_auth.user
+            is_new_user = False
+            
+            # 既存ユーザーのFirebase認証情報を更新
+            firebase_auth.firebase_email = firebase_email
+            firebase_auth.firebase_name = firebase_name
+            firebase_auth.firebase_picture = firebase_picture
+            firebase_auth.provider_id = provider_id
+            firebase_auth.save()
+            
+            logger.info(f"既存のFirebase認証ユーザーでログインしました: {user.email}")
+            
+        except FirebaseAuthInfo.DoesNotExist:
+            # 新規Firebase認証の場合
+            
+            # メールアドレスで既存ユーザーを検索
+            try:
+                user = CustomUser.objects.get(email=firebase_email)
+                is_new_user = False
+                logger.info(f"既存ユーザー({user.email})にFirebase認証情報を追加します")
+                
+                # 既存のユーザーにFirebase認証情報が既に関連付けられているか確認
+                try:
+                    existing_firebase_auth = FirebaseAuthInfo.objects.get(user=user)
+                    # 既存のFirebase認証情報を更新
+                    existing_firebase_auth.firebase_uid = firebase_uid
+                    existing_firebase_auth.firebase_email = firebase_email
+                    existing_firebase_auth.firebase_name = firebase_name
+                    existing_firebase_auth.firebase_picture = firebase_picture
+                    existing_firebase_auth.provider_id = provider_id
+                    existing_firebase_auth.save()
+                    logger.info(f"既存のFirebase認証情報を更新しました: {user.email}")
+                except FirebaseAuthInfo.DoesNotExist:
+                    # 新しいFirebase認証情報を作成
+                    FirebaseAuthInfo.objects.create(
+                        user=user,
+                        firebase_uid=firebase_uid,
+                        firebase_email=firebase_email,
+                        firebase_name=firebase_name,
+                        firebase_picture=firebase_picture,
+                        provider_id=provider_id
+                    )
+                    logger.info(f"新しいFirebase認証情報を作成しました: {user.email}")
+                
+            except CustomUser.DoesNotExist:
+                # 完全に新規のユーザーを作成
+                is_new_user = True
+                logger.info(f"新規ユーザーを作成します: {firebase_email}")
+                
+                user = CustomUser.objects.create_user(
+                    email=firebase_email,
+                    password=None  # Firebaseログインなのでパスワードは不要
+                )
+                
+                # デフォルトプロフィールを作成
+                UserProfile.objects.create(
+                    user=user,
+                    height=170.0,
+                    weight=60.0,
+                    nickname=firebase_name or firebase_email.split('@')[0],
+                    name=firebase_name or firebase_email.split('@')[0]
+                )
+                
+                # 新規ユーザー用のFirebase認証情報を作成
+                FirebaseAuthInfo.objects.create(
+                    user=user,
+                    firebase_uid=firebase_uid,
+                    firebase_email=firebase_email,
+                    firebase_name=firebase_name,
+                    firebase_picture=firebase_picture,
+                    provider_id=provider_id
+                )
+                logger.info(f"新規ユーザーとFirebase認証情報を作成しました: {user.email}")
+        
+        # 最終ログイン時刻を更新
+        user.last_login = timezone.now()
+        user.save()
+        
+        return user, is_new_user
+
+# Firebase認証状態確認ビュー
+class FirebaseAuthStatusView(APIView):
+    """
+    現在のユーザーのFirebase認証状態を確認するビュー
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        
+        try:
+            firebase_auth = FirebaseAuthInfo.objects.get(user=user)
+            return Response({
+                "is_firebase_authenticated": True,
+                "firebase_email": firebase_auth.firebase_email,
+                "firebase_name": firebase_auth.firebase_name,
+                "firebase_picture": firebase_auth.firebase_picture,
+                "provider_id": firebase_auth.provider_id
+            }, status=status.HTTP_200_OK)
+            
+        except FirebaseAuthInfo.DoesNotExist:
+            return Response({
+                "is_firebase_authenticated": False
             }, status=status.HTTP_200_OK)

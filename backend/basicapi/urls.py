@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import RegisterView, CustomTokenObtainPairView, UserProfileViewSet, WeightRecordViewSet, CalorieRecordViewSet, SleepRecordViewSet, AuthStatusView, CookieUserInfoView, StandardUserInfoView, LogoutView, DailyRecordUpsertAPIView, GoogleAuthView, GoogleAuthStatusView
+from .views import RegisterView, CustomTokenObtainPairView, UserProfileViewSet, WeightRecordViewSet, CalorieRecordViewSet, SleepRecordViewSet, AuthStatusView, CookieUserInfoView, StandardUserInfoView, LogoutView, DailyRecordUpsertAPIView, GoogleAuthView, GoogleAuthStatusView, FirebaseAuthView, FirebaseAuthStatusView
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -23,6 +23,9 @@ urlpatterns = [
     # Google認証
     path('auth/google/', GoogleAuthView.as_view(), name='google_auth'),
     path('auth/google/status/', GoogleAuthStatusView.as_view(), name='google_auth_status'),
+    # Firebase認証
+    path('auth/firebase/', FirebaseAuthView.as_view(), name='firebase_auth'),
+    path('auth/firebase/status/', FirebaseAuthStatusView.as_view(), name='firebase_auth_status'),
     # ログアウト
     path('logout/', LogoutView.as_view(), name='logout'),
     path('', include(router.urls)),

@@ -133,3 +133,18 @@ class GoogleAuthInfo(models.Model):
         if not self.token_expires_at:
             return False
         return timezone.now() < self.token_expires_at
+
+# Firebase認証情報テーブル
+class FirebaseAuthInfo(models.Model):
+    id = models.AutoField(primary_key=True)  # 主キー
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='firebase_auth')  # ユーザーID
+    firebase_uid = models.CharField(max_length=255, unique=True)  # FirebaseのUID
+    firebase_email = models.EmailField()  # Firebaseアカウントのメールアドレス
+    firebase_name = models.CharField(max_length=255, null=True, blank=True)  # Firebaseアカウントの名前
+    firebase_picture = models.URLField(null=True, blank=True)  # Firebaseアカウントのプロフィール画像URL
+    provider_id = models.CharField(max_length=255, null=True, blank=True)  # 認証プロバイダID（google.com, password等）
+    created_at = models.DateTimeField(auto_now_add=True)  # 作成日時
+    updated_at = models.DateTimeField(auto_now=True)  # 更新日時
+
+    def __str__(self):
+        return f"{self.user.email} - Firebase: {self.firebase_email}"
