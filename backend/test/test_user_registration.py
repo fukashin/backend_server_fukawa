@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
-from .models import CustomUser, UserProfile
+from basicapi.models import CustomUser, UserProfile
 
 class UserRegistrationTest(TestCase):
     """ユーザー登録機能のテスト"""

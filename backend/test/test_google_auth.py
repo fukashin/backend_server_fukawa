@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
-from .models import CustomUser, GoogleAuthInfo, UserProfile
+from basicapi.models import CustomUser, GoogleAuthInfo, UserProfile
 
 class GoogleAuthTest(TestCase):
     """Google認証機能のテスト"""
