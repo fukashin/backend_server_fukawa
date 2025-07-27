@@ -630,16 +630,23 @@ class GoogleAuthStatusView(APIView):
             }, status=status.HTTP_200_OK)
 
 # Firebase Admin SDKの初期化
-try:
-    # Firebase Admin SDKが既に初期化されているかチェック
-    firebase_admin.get_app()
-except ValueError:
-    # 初期化されていない場合は初期化
-    # 本番環境では、サービスアカウントのキーファイルを使用することを推奨
-    # ここではアプリケーションのデフォルト認証情報を使用
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred)
-    logger.info("Firebase Admin SDKが初期化されました")
+from django.conf import settings
+
+# テスト時にFirebase Admin SDKの初期化をスキップするオプション
+if not getattr(settings, 'FIREBASE_ADMIN_SKIP_INIT', False):
+    try:
+        # Firebase Admin SDKが既に初期化されているかチェック
+        firebase_admin.get_app()
+    except ValueError:
+        # 初期化されていない場合は初期化
+        # 本番環境では、サービスアカウントのキーファイルを使用することを推奨
+        # ここではアプリケーションのデフォルト認証情報を使用
+        try:
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDKが初期化されました")
+        except Exception as e:
+            logger.warning(f"Firebase Admin SDKの初期化に失敗しました: {e}")
 
 # Firebase認証ビュー
 class FirebaseAuthView(APIView):
