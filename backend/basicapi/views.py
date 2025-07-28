@@ -665,3 +665,320 @@ class FirebaseAuthStatusView(APIView):
             return Response({
                 "is_firebase_authenticated": False
             }, status=status.HTTP_200_OK)
+
+# 新しいFlutterアプリ用のAPIエンドポイント
+
+class UserRegistrationView(APIView):
+    """
+    Firebase認証後にユーザー情報をバックエンドDBに登録するビュー
+    """
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            logger.info("=== ユーザー登録リクエストを受信しました ===")
+            logger.info(f"リクエストデータ: {request.data}")
+            
+            # Firebase IDトークンを取得
+            firebase_token = request.data.get('firebase_token')
+            if not firebase_token:
+                return Response(
+                    {"error": "Firebase token is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Firebase IDトークンを検証
+            firebase_user = self._verify_firebase_token(firebase_token)
+            if not firebase_user:
+                return Response(
+                    {"error": "Invalid Firebase token"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # ユーザー情報を取得
+            firebase_uid = firebase_user.get('uid')
+            email = firebase_user.get('email')
+            name = request.data.get('name') or firebase_user.get('name') or email.split('@')[0]
+            photo_url = request.data.get('photo_url') or firebase_user.get('picture')
+            phone_number = request.data.get('phone_number')
+            email_verified = request.data.get('email_verified', False)
+            
+            with transaction.atomic():
+                # Firebase UIDでユーザーを検索
+                try:
+                    firebase_auth = FirebaseAuthInfo.objects.get(firebase_uid=firebase_uid)
+                    user = firebase_auth.user
+                    is_new_user = False
+                    logger.info(f"既存ユーザーが見つかりました: {user.email}")
+                    
+                except FirebaseAuthInfo.DoesNotExist:
+                    # 新規ユーザーを作成
+                    try:
+                        # メールアドレスで既存ユーザーを検索
+                        user = CustomUser.objects.get(email=email)
+                        is_new_user = False
+                        logger.info(f"既存ユーザー({user.email})にFirebase認証を追加します")
+                    except CustomUser.DoesNotExist:
+                        # 完全に新規のユーザーを作成
+                        user = CustomUser.objects.create_user(
+                            email=email,
+                            password=None
+                        )
+                        is_new_user = True
+                        logger.info(f"新規ユーザーを作成しました: {user.email}")
+                        
+                        # デフォルトプロフィールを作成
+                        UserProfile.objects.create(
+                            user=user,
+                            height=170.0,
+                            weight=60.0,
+                            nickname=name,
+                            name=name
+                        )
+                    
+                    # Firebase認証情報を作成または更新
+                    FirebaseAuthInfo.objects.update_or_create(
+                        user=user,
+                        defaults={
+                            'firebase_uid': firebase_uid,
+                            'firebase_email': email,
+                            'firebase_name': name,
+                            'firebase_picture': photo_url,
+                            'provider_id': firebase_user.get('provider_id', '')
+                        }
+                    )
+                
+                # 最終ログイン時刻を更新
+                user.last_login = timezone.now()
+                user.save()
+                
+                response_data = {
+                    "message": "User registration successful",
+                    "is_new_user": is_new_user,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "name": name,
+                        "photo_url": photo_url,
+                        "firebase_uid": firebase_uid
+                    }
+                }
+                
+                logger.info(f"ユーザー登録が完了しました: {user.email}")
+                return Response(response_data, status=status.HTTP_201_CREATED if is_new_user else status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f"ユーザー登録エラー: {e}", exc_info=True)
+            return Response(
+                {"error": "User registration failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _verify_firebase_token(self, id_token):
+        """
+        Firebase Admin SDKを使ってIDトークンを検証し、ユーザー情報を取得
+        """
+        try:
+            # Firebase Admin SDKを使ってトークンを検証
+            decoded_token = auth.verify_id_token(id_token)
+            
+            # ユーザー情報を取得
+            uid = decoded_token.get('uid')
+            if not uid:
+                return None
+            
+            # Firebase Authからユーザー情報を取得
+            firebase_user = auth.get_user(uid)
+            
+            # 必要な情報を辞書に格納
+            user_info = {
+                'uid': firebase_user.uid,
+                'email': firebase_user.email,
+                'name': firebase_user.display_name,
+                'picture': firebase_user.photo_url,
+                'provider_id': decoded_token.get('firebase', {}).get('sign_in_provider')
+            }
+            
+            return user_info
+            
+        except Exception as e:
+            logger.error(f"Firebase IDトークン検証エラー: {e}", exc_info=True)
+            return None
+
+class UserInfoView(APIView):
+    """
+    Firebase UIDでユーザー情報を取得するビュー
+    """
+    
+    def get(self, request, firebase_uid, *args, **kwargs):
+        try:
+            # Firebase IDトークンを検証
+            firebase_token = request.headers.get('Authorization', '').replace('Bearer ', '')
+            if not firebase_token:
+                return Response(
+                    {"error": "Firebase token is required"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # Firebase IDトークンを検証
+            firebase_user = self._verify_firebase_token(firebase_token)
+            if not firebase_user or firebase_user.get('uid') != firebase_uid:
+                return Response(
+                    {"error": "Invalid Firebase token or UID mismatch"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # Firebase UIDでユーザーを検索
+            try:
+                firebase_auth = FirebaseAuthInfo.objects.get(firebase_uid=firebase_uid)
+                user = firebase_auth.user
+                
+                # ユーザープロフィールを取得
+                try:
+                    profile = UserProfile.objects.get(user=user)
+                    profile_data = {
+                        "height": profile.height,
+                        "weight": profile.weight,
+                        "nickname": profile.nickname,
+                        "name": profile.name
+                    }
+                except UserProfile.DoesNotExist:
+                    profile_data = None
+                
+                response_data = {
+                    "exists": True,
+                    "user": {
+                        "id": user.id,
+                        "email": user.email,
+                        "firebase_uid": firebase_uid,
+                        "last_login": user.last_login.isoformat() if user.last_login else None,
+                        "profile": profile_data
+                    }
+                }
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+                
+            except FirebaseAuthInfo.DoesNotExist:
+                return Response({"exists": False}, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            logger.error(f"ユーザー情報取得エラー: {e}", exc_info=True)
+            return Response(
+                {"error": "Failed to get user info"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _verify_firebase_token(self, id_token):
+        """
+        Firebase Admin SDKを使ってIDトークンを検証し、ユーザー情報を取得
+        """
+        try:
+            # Firebase Admin SDKを使ってトークンを検証
+            decoded_token = auth.verify_id_token(id_token)
+            
+            # ユーザー情報を取得
+            uid = decoded_token.get('uid')
+            if not uid:
+                return None
+            
+            # Firebase Authからユーザー情報を取得
+            firebase_user = auth.get_user(uid)
+            
+            # 必要な情報を辞書に格納
+            user_info = {
+                'uid': firebase_user.uid,
+                'email': firebase_user.email,
+                'name': firebase_user.display_name,
+                'picture': firebase_user.photo_url,
+                'provider_id': decoded_token.get('firebase', {}).get('sign_in_provider')
+            }
+            
+            return user_info
+            
+        except Exception as e:
+            logger.error(f"Firebase IDトークン検証エラー: {e}", exc_info=True)
+            return None
+
+class FirebaseTokenVerifyView(APIView):
+    """
+    Firebase IDトークンを検証するビュー
+    """
+    
+    def post(self, request, *args, **kwargs):
+        try:
+            firebase_token = request.data.get('firebase_token')
+            if not firebase_token:
+                return Response(
+                    {"error": "Firebase token is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Firebase IDトークンを検証
+            firebase_user = self._verify_firebase_token(firebase_token)
+            if not firebase_user:
+                return Response(
+                    {"error": "Invalid Firebase token"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            response_data = {
+                "valid": True,
+                "user": {
+                    "uid": firebase_user.get('uid'),
+                    "email": firebase_user.get('email'),
+                    "name": firebase_user.get('name'),
+                    "picture": firebase_user.get('picture'),
+                    "provider_id": firebase_user.get('provider_id')
+                }
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Firebase トークン検証エラー: {e}", exc_info=True)
+            return Response(
+                {"error": "Token verification failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def _verify_firebase_token(self, id_token):
+        """
+        Firebase Admin SDKを使ってIDトークンを検証し、ユーザー情報を取得
+        """
+        try:
+            # Firebase Admin SDKを使ってトークンを検証
+            decoded_token = auth.verify_id_token(id_token)
+            
+            # ユーザー情報を取得
+            uid = decoded_token.get('uid')
+            if not uid:
+                return None
+            
+            # Firebase Authからユーザー情報を取得
+            firebase_user = auth.get_user(uid)
+            
+            # 必要な情報を辞書に格納
+            user_info = {
+                'uid': firebase_user.uid,
+                'email': firebase_user.email,
+                'name': firebase_user.display_name,
+                'picture': firebase_user.photo_url,
+                'provider_id': decoded_token.get('firebase', {}).get('sign_in_provider')
+            }
+            
+            return user_info
+            
+        except Exception as e:
+            logger.error(f"Firebase IDトークン検証エラー: {e}", exc_info=True)
+            return None
+
+class HealthCheckView(APIView):
+    """
+    APIの健康状態をチェックするビュー
+    """
+    
+    def get(self, request, *args, **kwargs):
+        return Response({
+            "status": "healthy",
+            "timestamp": timezone.now().isoformat(),
+            "message": "API is running"
+        }, status=status.HTTP_200_OK)

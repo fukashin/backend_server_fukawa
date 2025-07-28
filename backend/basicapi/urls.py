@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import RegisterView, CustomTokenObtainPairView, UserProfileViewSet, WeightRecordViewSet, CalorieRecordViewSet, SleepRecordViewSet, AuthStatusView, CookieUserInfoView, StandardUserInfoView, LogoutView, DailyRecordUpsertAPIView, FirebaseAuthView, FirebaseAuthStatusView
+from .views import RegisterView, CustomTokenObtainPairView, UserProfileViewSet, WeightRecordViewSet, CalorieRecordViewSet, SleepRecordViewSet, AuthStatusView, CookieUserInfoView, StandardUserInfoView, LogoutView, DailyRecordUpsertAPIView, FirebaseAuthView, FirebaseAuthStatusView, UserRegistrationView, UserInfoView, FirebaseTokenVerifyView, HealthCheckView
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -23,6 +23,11 @@ urlpatterns = [
     # Firebase認証
     path('auth/firebase/', FirebaseAuthView.as_view(), name='firebase_auth'),
     path('auth/firebase/status/', FirebaseAuthStatusView.as_view(), name='firebase_auth_status'),
+    # 新しいFlutterアプリ用のAPIエンドポイント
+    path('users/register/', UserRegistrationView.as_view(), name='user_registration'),
+    path('users/<str:firebase_uid>/', UserInfoView.as_view(), name='user_info_by_uid'),
+    path('auth/verify-token/', FirebaseTokenVerifyView.as_view(), name='firebase_token_verify'),
+    path('health/', HealthCheckView.as_view(), name='health_check'),
     # ログアウト
     path('logout/', LogoutView.as_view(), name='logout'),
     path('', include(router.urls)),
