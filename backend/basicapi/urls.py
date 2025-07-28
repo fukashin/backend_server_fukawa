@@ -27,6 +27,8 @@ urlpatterns = [
     path('users/register/', UserRegistrationView.as_view(), name='user_registration'),
     path('users/<str:firebase_uid>/', UserInfoView.as_view(), name='user_info_by_uid'),
     path('auth/verify-token/', FirebaseTokenVerifyView.as_view(), name='firebase_token_verify'),
+    path('auth/google/register/', UserRegistrationView.as_view(), name='google_auth_register'),
+    path('auth/apple/register/', UserRegistrationView.as_view(), name='apple_auth_register'),
     path('health/', HealthCheckView.as_view(), name='health_check'),
     # ログアウト
     path('logout/', LogoutView.as_view(), name='logout'),
