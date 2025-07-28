@@ -672,6 +672,7 @@ class UserRegistrationView(APIView):
     """
     Firebase認証後にユーザー情報をバックエンドDBに登録するビュー
     """
+    permission_classes = []  # 認証不要
     
     def post(self, request, *args, **kwargs):
         try:
