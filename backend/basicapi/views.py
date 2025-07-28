@@ -414,7 +414,12 @@ class FirebaseAuthView(APIView):
     
     def post(self, request, *args, **kwargs):
         try:
-            logger.info("Firebase認証リクエストを受信しました")
+            logger.info("=== Firebase認証リクエストを受信しました ===")
+            logger.info(f"リクエストメソッド: {request.method}")
+            logger.info(f"リクエストパス: {request.path}")
+            logger.info(f"リクエストヘッダー: {dict(request.headers)}")
+            logger.info(f"リクエストボディ: {request.body.decode('utf-8') if request.body else 'なし'}")
+            logger.info("=======================================")
             
             # リクエストからFirebase IDトークンを取得
             id_token = request.data.get('id_token')
