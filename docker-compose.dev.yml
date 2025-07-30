@@ -27,6 +27,7 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/code # ← ディレクトリ全体をマウント（個別ではなく）
+      - ./logs/backend:/var/log/app
     depends_on:
       - database
     # tty: true # コンテナが終了せずに標準出力を保持する

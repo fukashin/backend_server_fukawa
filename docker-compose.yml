@@ -40,6 +40,6 @@ services:
     command: >
       sh -c "
         python manage.py migrate &&
-        python manage.py runserver 0.0.0.0:8000"
+        python manage.py runserver 0.0.0.0:8000 > /var/log/app/backend.log 2>&1"
     ports:
       - "8000:8000"
